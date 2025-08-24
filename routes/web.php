@@ -11,6 +11,14 @@ Route::get('/asientos', function () {
     return view('asientos');
 })->name('asientos');
 
+Route::get('/eventos', function () {
+    return view('eventos');
+})->name('eventos');
+
+Route::get('/contacto', function () {
+    return view('contacto');
+})->name('contacto');
+
 Route::get('/dashboard', function () {
     return view('dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
