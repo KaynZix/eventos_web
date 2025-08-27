@@ -7,11 +7,23 @@
     </a>
 
     <!-- Nav SIEMPRE visible (sin hamburguesa) -->
-    <nav class="flex items-center gap-4 sm:gap-6 text-[11px] sm:text-xs uppercase tracking-widest font-semibold
-                overflow-x-auto whitespace-nowrap scrollbar-none">
-      <a class="px-2 py-1 rounded hover:bg-white/10" href="{{ route('eventos')}}">Eventos</a>
-      <a class="px-2 py-1 rounded hover:bg-white/10" href="{{ route('contacto')}}">Contacto</a>
-    </nav>
+    @if (Auth::check())
+      <nav class="flex items-center gap-4 sm:gap-6 text-[11px] sm:text-xs uppercase tracking-widest font-semibold
+        overflow-x-auto whitespace-nowrap scrollbar-none">
+        <a href="{{ route('dashboard') }}" class="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700">Dashboard</a>       
+        <a class="px-2 py-1 rounded hover:bg-white/10" href="{{ route('eventos.index')}}">Eventos</a>
+        <a class="px-2 py-1 rounded hover:bg-white/10" href="{{ route('contacto')}}">Contacto</a>
+        <form method="POST" action="{{ route('logout') }}"> @csrf
+          <button class="px-3 py-1.5 rounded bg-red-600 hover:bg-red-500 text-white">Cerrar sesión</button>
+        </form> 
+      </nav>
+    @else
+      <nav class="flex items-center gap-4 sm:gap-6 text-[11px] sm:text-xs uppercase tracking-widest font-semibold
+        overflow-x-auto whitespace-nowrap scrollbar-none">
+        <a class="px-2 py-1 rounded hover:bg-white/10" href="{{ route('eventos.index')}}">Eventos</a>
+        <a class="px-2 py-1 rounded hover:bg-white/10" href="{{ route('contacto')}}">Contacto</a>
+      </nav>
+    @endif
   </div>
 </header>
 

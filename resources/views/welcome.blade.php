@@ -39,7 +39,7 @@
 
         <!-- BOTÓN -->
         <div class="mt-10">
-          <a href="{{ route('eventos')  }}"
+          <a href="{{ route('eventos.index')  }}"
              class="inline-block bg-red-600 hover:bg-red-700 focus:ring-4 focus:ring-red-500/30
                     text-white font-extrabold tracking-widest uppercase
                     px-8 py-4 text-lg rounded">
