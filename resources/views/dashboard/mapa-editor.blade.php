@@ -58,14 +58,14 @@
         --mesa-label-bd: #111827;
 
         /* //CODIGO_MESAS: tamaños por rango */
-        --t12-w: 110px;
-        --t12-h: 60px;
+        --t12-w: 55px;
+        --t12-h: 30px;
         /* 1–2 horizontal */
-        --t34-w: 70px;
-        --t34-h: 70px;
+        --t34-w: 45px;
+        --t34-h: 45px;
         /* 3–4 cuadrada  */
-        --t58-w: 180px;
-        --t58-h: 90px;
+        --t58-w: 90px;
+        --t58-h: 45px;
         /* 5–8 horizontal */
     }
 
@@ -170,7 +170,7 @@
         justify-content: center;
         border: 3px solid var(--mesa-label-bd);
         font-weight: 700;
-        font-size: 18px;
+        font-size: 12px;
     }
     </style>
 
