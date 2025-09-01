@@ -1,29 +1,80 @@
 <!doctype html>
 <html lang="es">
+
 <head>
-  <meta charset="utf-8">
-  <title>Promociones</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="utf-8">
+    <title>Promociones</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
+
 <body class="bg-neutral-900 text-white">
-<div class="max-w-3xl mx-auto p-6">
-  <h1 class="text-2xl font-bold mb-4">Promociones (opcional)</h1>
-  <form method="POST" action="{{ route('reservas.promos.store') }}" class="space-y-4">
-    @csrf
-    <div class="space-y-2">
-      @foreach($promos as $p)
-        <label class="flex items-center gap-3">
-          <input type="checkbox" name="promos[]" value="{{ $p['id'] }}" class="scale-125">
-          <span>{{ $p['nombre'] }}</span>
-        </label>
-      @endforeach
+
+    @if(isset($secondsLeft))
+    @php
+    $left = max(0, (int)$secondsLeft);
+    $mm = str_pad((int) floor($left/60), 2, '0', STR_PAD_LEFT);
+    $ss = str_pad($left % 60, 2, '0', STR_PAD_LEFT);
+    @endphp
+
+    <div id="timer-box" data-left="{{ $left }}"
+        class="bg-amber-600/20 border border-amber-500/40 text-amber-200 px-4 py-2 rounded mb-4">
+        Tienes <b id="timer">{{ $mm }}:{{ $ss }}</b> para completar la reserva antes de que las mesas vuelvan a quedar
+        libres.
     </div>
-    <div class="flex gap-3 mt-4">
-      <a href="{{ route('reservas.checkout') }}" class="px-4 py-2 rounded bg-neutral-700">Omitir</a>
-      <button class="px-4 py-2 rounded bg-red-600 hover:bg-red-500">Continuar</button>
+
+    <script>
+    (function() {
+        const box = document.getElementById('timer-box');
+        if (!box) return;
+
+        let left = parseInt(box.dataset.left, 10) || 0;
+        const el = document.getElementById('timer');
+
+        function tick() {
+            if (left <= 0) {
+                location.reload();
+                return;
+            }
+            const m = Math.floor(left / 60);
+            const s = left % 60;
+            el.textContent = String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+            left -= 1;
+            setTimeout(tick, 1000);
+        }
+        tick();
+    })();
+    </script>
+    @endif
+
+
+    <div class="max-w-3xl mx-auto p-6">
+        <h1 class="text-2xl font-bold mb-4">Promociones (opcional)</h1>
+        <form method="POST" action="{{ route('reservas.promos.store') }}" class="space-y-4">
+            @csrf
+            <div class="space-y-2">
+                @foreach($promos as $p)
+                <label class="flex items-center gap-3">
+                    <input type="checkbox" name="promos[]" value="{{ $p['id'] }}" class="scale-125">
+                    <span>{{ $p['nombre'] }}</span>
+                </label>
+                @endforeach
+            </div>
+            <div class="flex gap-3 mt-4">
+                <a href="{{ route('reservas.checkout') }}" class="px-4 py-2 rounded bg-neutral-700">Omitir</a>
+                <button class="px-4 py-2 rounded bg-red-600 hover:bg-red-500">Continuar</button>
+            </div>
+        </form>
+        <form method="POST" action="{{ route('reservas.cancel') }}"
+            onsubmit="return confirm('¿Cancelar la reserva en curso?');" class="inline">
+            @csrf
+            <button type="submit" class="px-4 py-2 rounded bg-neutral-700 hover:bg-neutral-600 text-white"
+                onclick="this.disabled=true; this.form.submit();">
+                Cancelar
+            </button>
+        </form>
+
     </div>
-  </form>
-</div>
 </body>
+
 </html>
