@@ -1,106 +1,88 @@
 <?php
 
-namespace App\Http\Controllers\Admin;
+namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use App\Models\Evento;
-use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
-class MapaEditorController extends Controller
+class MapaPublicoController extends Controller
 {
-    /** Carga editor de mapa */
-    public function edit(Evento $evento)
+    public function show(Evento $evento)
     {
-        $cols   = Schema::getColumnListing('escenario');
-        $hasX   = in_array('x', $cols);
-        $hasY   = in_array('y', $cols);
-        $hasRot = in_array('rot', $cols);
-
-        $q = DB::table('escenario as e')
+        $mesas = DB::table('escenario as e')
             ->join('mesa as m', 'm.id', '=', 'e.id_mesa')
+            ->leftJoin('reserva_mesa as rm', 'rm.escenario_id', '=', 'e.id')
+            ->leftJoin('reserva as r', function ($q) use ($evento) {
+                $q->on('r.id', '=', 'rm.reserva_id')
+                  ->where('r.id_evento', '=', $evento->id);
+            })
+            ->leftJoin('mesas_hold as h', function ($q) use ($evento) {
+                $q->on('h.escenario_id', '=', 'e.id')
+                  ->where('h.evento_id', '=', $evento->id)
+                  ->where('h.expires_at', '>', now());
+            })
             ->where('e.id_evento', $evento->id)
-            ->select('e.id', 'e.id_mesa', 'm.sillas');
+            ->select([
+                'e.id as escenario_id',
+                'm.id as mesa_id',
+                'm.sillas',
+                'e.x','e.y',
+                DB::raw('CASE WHEN r.id IS NULL THEN 0 ELSE 1 END as reservada'),
+                DB::raw('CASE WHEN h.id IS NULL THEN 0 ELSE 1 END as bloqueada'),
+                DB::raw('COALESCE(TIMESTAMPDIFF(SECOND, NOW(), h.expires_at),0) as hold_left'),
+            ])
+            ->orderBy('y')->orderBy('x')
+            ->get();
 
-        $q->addSelect($hasX ? 'e.x' : DB::raw('0 as x'));
-        $q->addSelect($hasY ? 'e.y' : DB::raw('0 as y'));
-        $q->addSelect($hasRot ? 'e.rot' : DB::raw('0 as rot'));
+        // ---- Slots cada 30 min (maneja fin al día siguiente) ----
+        // Normaliza HH:MM -> HH:MM:SS
+        $hIni = preg_match('/^\d{2}:\d{2}:\d{2}$/', $evento->hora_inicio) ? $evento->hora_inicio : ($evento->hora_inicio . ':00');
+        $hFin = preg_match('/^\d{2}:\d{2}:\d{2}$/', $evento->hora_termino) ? $evento->hora_termino : ($evento->hora_termino . ':00');
 
-        $mesas = $q->orderBy('e.id')->get();
+        // Toma solo la parte de fecha y luego setea la hora
+        $baseFecha = Carbon::parse($evento->fecha)->startOfDay();
 
-        return view('dashboard.mapa-editor', compact('evento', 'mesas'));
-    }
-
-    /** Guarda TODO el layout + precio base por silla */
-    public function save(Request $request, Evento $evento)
-    {
-        try {
-            $data = $request->validate([
-                'mesas'                => 'array',
-                'mesas.*.sillas'       => 'required|integer|min:1|max:8',
-                'mesas.*.x'            => 'required|integer|min:0',
-                'mesas.*.y'            => 'required|integer|min:0',
-                'mesas.*.rot'          => 'nullable|integer|in:0,90,180,270',
-                'precio_silla_base'    => 'nullable|numeric|min:0',
-            ]);
-
-            $mesas = $data['mesas'] ?? [];
-
-            DB::transaction(function () use ($evento, $mesas, $data) {
-                // 1) Precio por silla (si existe la columna)
-                $colsEvento = Schema::getColumnListing('eventos');
-                $precioCol = null;
-                foreach (['precio_silla_base', 'precio_silla'] as $c) {
-                    if (in_array($c, $colsEvento)) { $precioCol = $c; break; }
-                }
-                if ($precioCol !== null && array_key_exists('precio_silla_base', $data)) {
-                    DB::table('eventos')
-                        ->where('id', $evento->id)
-                        ->update([$precioCol => $data['precio_silla_base'] ?? 0]);
-                }
-
-                // 2) Borrar layout anterior
-                $mesaIds = DB::table('escenario')
-                    ->where('id_evento', $evento->id)
-                    ->pluck('id_mesa');
-
-                if ($mesaIds->count()) {
-                    DB::table('escenario')->where('id_evento', $evento->id)->delete();
-                    DB::table('mesa')->whereIn('id', $mesaIds)->delete();
-                }
-
-                // 3) Insertar nuevas mesas
-                $colsEsc   = Schema::getColumnListing('escenario');
-                $hasEstado = in_array('estado', $colsEsc);
-                $hasX      = in_array('x', $colsEsc);
-                $hasY      = in_array('y', $colsEsc);
-                $hasRot    = in_array('rot', $colsEsc);
-                $hasHora   = in_array('hora_reserva', $colsEsc);
-
-                foreach ($mesas as $m) {
-                    $mesaId = DB::table('mesa')->insertGetId([
-                        'sillas' => (int) $m['sillas'],
-                    ]);
-
-                    $payload = [
-                        'id_evento'    => (int) $evento->id,
-                        'id_mesa'      => (int) $mesaId,
-                        'id_escenario' => (int) $evento->id_escenario,
-                    ];
-                    if ($hasX)      $payload['x'] = (int) $m['x'];
-                    if ($hasY)      $payload['y'] = (int) $m['y'];
-                    if ($hasRot)    $payload['rot'] = (int) ($m['rot'] ?? 0);
-                    if ($hasEstado) $payload['estado'] = 'disponible';
-                    if ($hasHora)   $payload['hora_reserva'] = null;
-
-                    DB::table('escenario')->insert($payload);
-                }
-            });
-
-            return response()->json(['ok' => true]);
-        } catch (\Throwable $e) {
-            return response()->json(['ok' => false, 'msg' => $e->getMessage()], 500);
+        $inicio = $baseFecha->copy()->setTimeFromTimeString($hIni);
+        $fin    = $baseFecha->copy()->setTimeFromTimeString($hFin);
+        if ($fin->lessThanOrEqualTo($inicio)) {
+            $fin->addDay(); // termina al día siguiente
         }
+
+        $slots = [];
+        for ($t = $inicio->copy(); $t <= $fin; $t->addMinutes(30)) {
+            $slots[] = $t->format('H:i');
+        }
+
+        return view('mapa.publico', compact('evento','mesas','slots'));
     }
+
+    // Devuelve sólo el estado de cada mesa (para polling en la UI)
+    // app/Http/Controllers/MapaPublicoController.php
+
+    public function status(Evento $evento)
+    {
+        $rows = DB::table('escenario as e')
+            ->leftJoin('reserva_mesa as rm', 'rm.escenario_id', '=', 'e.id')
+            ->leftJoin('reserva as r', function ($q) use ($evento) {
+                $q->on('r.id', '=', 'rm.reserva_id')
+                ->where('r.id_evento', $evento->id);
+            })
+            ->leftJoin('mesas_hold as h', function ($q) use ($evento) {
+                $q->on('h.escenario_id', '=', 'e.id')
+                ->where('h.evento_id', '=', $evento->id)
+                ->where('h.expires_at', '>', DB::raw('UTC_TIMESTAMP()'));
+            })
+            ->where('e.id_evento', $evento->id)
+            ->select([
+                'e.id as escenario_id',
+                DB::raw('CASE WHEN r.id IS NULL THEN 0 ELSE 1 END as reservada'),
+                DB::raw('CASE WHEN h.id IS NULL THEN 0 ELSE 1 END as bloqueada'),   
+                DB::raw('COALESCE(TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), h.expires_at),0) as hold_left'),
+            ])
+            ->get();
+
+        return response()->json($rows);
+    }
+
 }
