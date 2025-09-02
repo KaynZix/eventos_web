@@ -16,103 +16,135 @@ class ReservasPublicController extends Controller
      * guarda en sesión y deja un cookie para reanudar.
      * Recibe: evento_id, llegada (HH:MM), mesas[escenario_id...], flow(promos|pago)
      */
-    public function start(Request $r)
+public function start(Request $req)
     {
-        $data = $r->validate([
+        $v = $req->validate([
             'evento_id' => 'required|integer',
-            'llegada'   => 'required|string',
-            'mesas'     => 'required|array|min:1',
+            'llegada'   => 'required|string',            // 'HH:MM'
+            'mesas'     => 'required|array|min:1',       // IDs de tabla 'escenario' (e.id)
             'mesas.*'   => 'integer',
             'flow'      => 'required|in:promos,pago',
         ]);
 
-        $evento = Evento::findOrFail($data['evento_id']);
+        // Evento
+        $evento = DB::table('eventos')->where('id', $v['evento_id'])->first();
+        if (!$evento) {
+            return response()->json(['ok'=>false,'msg'=>'Evento no encontrado'], 404);
+        }
 
-        // Limpia holds vencidos (higiene)
-        DB::table('mesas_hold')->where('expires_at', '<=', DB::raw('UTC_TIMESTAMP()'))->delete();
-
-        // Validar que las mesas existen, pertenecen al evento y no están reservadas
-        $esc = DB::table('escenario as e')
+        // Mesas seleccionadas con estado actual
+        $sel = DB::table('escenario as e')
+            ->join('mesa as m', 'm.id', '=', 'e.id_mesa')
             ->leftJoin('reserva_mesa as rm', 'rm.escenario_id', '=', 'e.id')
-            ->leftJoin('reserva as r', function($q) use ($evento){
-                $q->on('r.id','=','rm.reserva_id')->where('r.id_evento',$evento->id);
+            ->leftJoin('reserva as r', function($q) use ($v) {
+                $q->on('r.id', '=', 'rm.reserva_id')
+                  ->where('r.id_evento', '=', $v['evento_id']);
             })
-            ->where('e.id_evento',$evento->id)
-            ->whereIn('e.id',$data['mesas'])
-            ->select('e.id', DB::raw('CASE WHEN r.id IS NULL THEN 0 ELSE 1 END as reservada'))
+            ->leftJoin('mesas_hold as h', function($q) use ($v) {
+                $q->on('h.escenario_id', '=', 'e.id')
+                  ->where('h.evento_id', '=', $v['evento_id'])
+                  ->where('h.expires_at', '>', now());
+            })
+            ->where('e.id_evento', $v['evento_id'])
+            ->whereIn('e.id', $v['mesas'])
+            ->select([
+                'e.id as escenario_id',
+                'm.id as mesa_id',
+                'm.sillas',
+                'e.x','e.y',
+                DB::raw('CASE WHEN r.id IS NULL THEN 0 ELSE 1 END as reservada'),
+                DB::raw('CASE WHEN h.id IS NULL THEN 0 ELSE 1 END as bloqueada'),
+            ])
             ->get();
 
-        if ($esc->count() !== count($data['mesas'])) {
-            return response()->json(['ok'=>false,'msg'=>'Mesas inválidas.'], 422);
-        }
-        if ($esc->firstWhere('reservada',1)) {
-            return response()->json(['ok'=>false,'msg'=>'Alguna mesa ya está reservada.'], 422);
+        if ($sel->isEmpty() || $sel->count() !== count($v['mesas'])) {
+            return response()->json(['ok'=>false,'msg'=>'Selección de mesas inválida'], 422);
         }
 
-        // Crear HOLDs (8 minutos) de forma atómica
-        $token     = Str::uuid()->toString();
-        $sessionId = $r->session()->getId();
-        $expiresAt = Carbon::now()->addMinutes(8);
+        // Validar disponibilidad
+        foreach ($sel as $row) {
+            if ((int)$row->reservada === 1) {
+                return response()->json(['ok'=>false,'msg'=>"La mesa {$row->escenario_id} ya fue reservada"], 409);
+            }
+            if ((int)$row->bloqueada === 1) {
+                return response()->json(['ok'=>false,'msg'=>"La mesa {$row->escenario_id} está temporalmente bloqueada"], 409);
+            }
+        }
 
-        DB::beginTransaction();
-        try {
-            foreach ($data['mesas'] as $escId) {
-                // Impide hold si ya hay uno activo para esa mesa
-                $inserted = DB::insert(
-                    "INSERT INTO mesas_hold (evento_id, escenario_id, session_id, hold_token, expires_at, created_at, updated_at)
-                    SELECT ?, ?, ?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 MINUTE), UTC_TIMESTAMP(), UTC_TIMESTAMP()
-                    FROM DUAL
-                    WHERE NOT EXISTS (
-                      SELECT 1 FROM mesas_hold h
-                      WHERE h.evento_id = ? AND h.escenario_id = ? AND h.expires_at > UTC_TIMESTAMP()
-                    )
-                    ", [$evento->id, $escId, $sessionId, $token, $evento->id, $escId]);
+        // Zonas del evento (recargo fijo por silla)
+        $zonas = DB::table('evento_zona_precio')
+            ->where('evento_id', $v['evento_id'])
+            ->get();
 
-                if (!$inserted) {
-                    DB::rollBack();
-                    return response()->json(['ok'=>false,'msg'=>'Una mesa fue tomada por otro usuario.'], 409);
+        $base  = (int) $evento->precio_silla_base;
+        $items = [];
+        $total = 0;
+
+        // Si algún día guardas tamaño real de la mesa, podrías usar el centro (x+W/2, y+H/2).
+        // Por ahora, usamos (x,y) tal como se guarda en 'escenario'.
+        foreach ($sel as $m) {
+            $recargo = 0;
+            foreach ($zonas as $z) {
+                if ($m->x >= $z->x && $m->x < ($z->x + $z->w) &&
+                    $m->y >= $z->y && $m->y < ($z->y + $z->h)) {
+                    $recargo += (int) $z->factor;  // recargo fijo por silla
                 }
             }
-            DB::commit();
-        } catch (\Throwable $e) {
-            DB::rollBack();
-            return response()->json(['ok'=>false,'msg'=>'No se pudo bloquear las mesas.'], 500);
+            $pp  = $base + $recargo;           // precio por silla final
+            $sub = $pp * (int)$m->sillas;      // subtotal mesa
+
+            $items[] = [
+                'escenario_id'     => (int)$m->escenario_id,
+                'mesa_id'          => (int)$m->mesa_id,
+                'sillas'           => (int)$m->sillas,
+                'precio_por_silla' => $pp,
+                'subtotal'         => $sub,
+            ];
+            $total += $sub;
         }
 
-        // Cookie para poder reanudar (vigencia igual/menor al hold)
-        Cookie::queue(cookie(
-            'reserva_hold',
-            json_encode([
-                'token'     => $token,
-                'evento_id' => $evento->id,
-                'llegada'   => $data['llegada'],
-                'flow'      => $data['flow'], // promos|pago
-            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            10 // minutos
-        ));
+        // (Opcional) Crear HOLD temporal para evitar colisiones
+        $sessionId = $req->session()->getId();
+        $holdToken = (string) Str::uuid();
+        $expires   = now()->addMinutes(config('app.reserva_hold_minutes', 8));
 
-        // Guardar “reserva en curso” + info del hold en sesión
+        // Limpia holds previos de esta sesión para este evento
+        DB::table('mesas_hold')
+            ->where('evento_id', $v['evento_id'])
+            ->where('session_id', $sessionId)
+            ->delete();
+
+        foreach ($sel as $m) {
+            DB::table('mesas_hold')->insert([
+                'evento_id'   => $v['evento_id'],
+                'escenario_id'=> $m->escenario_id,
+                'session_id'  => $sessionId,
+                'hold_token'  => $holdToken,
+                'expires_at'  => $expires,
+                'created_at'  => now(),
+                'updated_at'  => now(),
+            ]);
+        }
+
+        // Persistimos pre-reserva para la siguiente página
         session([
-            'reserva' => [
-                'evento_id' => $evento->id,
-                'llegada'   => $data['llegada'],
-                'mesas'     => array_values($data['mesas']),
-                'promos'    => [],
-                'hold'      => [
-                    'token'      => $token,
-                    'expires_at' => $expiresAt->toIso8601String(),
-                ],
-            ]
+            'reserva.pre' => [
+                'evento_id'    => (int)$evento->id,
+                'llegada'      => $v['llegada'],
+                'items'        => $items,
+                'total'        => $total,
+                'hold_token'   => $holdToken,
+                'hold_expires' => $expires->toDateTimeString(),
+            ],
         ]);
 
-        return response()->json([
-            'ok'       => true,
-            'redirect' => $data['flow']==='promos'
-                ? route('reservas.promos')
-                : route('reservas.checkout'),
-        ]);
+        // Redirección según flujo
+        $redirect = $v['flow'] === 'promos'
+            ? route('reservas.promos')    // crea estas rutas a tus vistas reales
+            : route('reservas.checkout');
+
+        return response()->json(['ok'=>true, 'redirect'=>$redirect]);
     }
-
     /** Segundos restantes del hold; <=0 si expiró */
     protected function remainingSecondsOrFail(): int
     {

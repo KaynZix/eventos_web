@@ -9,12 +9,20 @@ class Evento extends Model
     protected $table = 'eventos';
 
     protected $fillable = [
-        'nombre','genero','tributo','fecha',
-        'hora_inicio','hora_termino','imagen','id_escenario',
+        'nombre',
+        'genero',
+        'tributo',
+        'fecha',
+        'hora_inicio',
+        'hora_termino',
+        'imagen',
+        'id_escenario',
+        'precio_silla_base',
     ];
 
     protected $casts = [
         'tributo' => 'boolean',
         'fecha'   => 'date',
+        'precio_silla_base'  => 'integer',
     ];
 }

@@ -44,6 +44,10 @@
               <th class="py-2 pr-3">Género/Tributo</th>
               <th class="py-2 pr-3">Escenario</th>
               <th class="py-2 pr-3">Horario</th>
+              <th class="py-2 pr-3">Sillas</th>
+              <th class="py-2 pr-3">Precio base silla</th>
+              <th class="py-2 pr-3">Reservas</th>
+
               <th class="py-2">Acciones</th>
             </tr>
           </thead>
@@ -58,10 +62,13 @@
               </td>
               <td class="py-2 pr-3">Esc {{ $e->id_escenario }}</td>
               <td class="py-2 pr-3">{{ substr($e->hora_inicio,0,5) }}–{{ substr($e->hora_termino,0,5) }}</td>
+              <td class="py-2 pr-3">{{ number_format($e->sillas_total, 0, ',', '.') }}</td>
+              <td class="py-2 pr-3">${{ number_format($e->precio_silla_base, 0, ',', '.') }}</td>
+              <td class="py-2 pr-3">{{ number_format($e->reservas, 0, ',', '.') }}</td>
               <td class="py-2">
-                <a href="{{ route('dashboard.eventos.edit', $e) }}" class="btn bg-neutral-800 hover:bg-neutral-700">Editar</a>
+                <a href="{{ route('dashboard.eventos.edit', $e->id) }}" class="btn bg-neutral-800 hover:bg-neutral-700">Editar</a>
                 <a href="{{ route('dashboard.eventos.mapa', $e->id) }}" class="btn bg-sky-700 hover:bg-sky-600 text-white ml-2">Mapa</a>
-                <form action="{{ route('dashboard.eventos.destroy', $e) }}" method="POST" class="inline" onsubmit="return confirm('¿Eliminar «{{ $e->nombre }}»?')">
+                <form action="{{ route('dashboard.eventos.destroy', $e->id) }}" method="POST" class="inline" onsubmit="return confirm('¿Eliminar «{{ $e->nombre }}»?')">
                   @csrf @method('DELETE')
                   <button class="btn bg-red-600 hover:bg-red-500 text-white ml-2">Eliminar</button>
                 </form>

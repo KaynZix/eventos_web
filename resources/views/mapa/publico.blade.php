@@ -83,9 +83,9 @@
   </div>
 </header>
 
-<div class="max-w-7xl mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+<div class="w-full px-4 md:px-6 grid grid-cols-1 lg:grid-cols-[1100px_320px] gap-6">
   <!-- Mapa -->
-  <section class="card p-4">
+  <section class="card p-3">
     <div class="flex items-center justify-between mb-2">
       <div class="text-sm text-neutral-300">
         {{ \Illuminate\Support\Carbon::parse($evento->fecha)->translatedFormat('l d \\de F Y') }}
@@ -94,7 +94,7 @@
       <div class="text-xs text-neutral-400">Escenario {{ $evento->id_escenario }}</div>
     </div>
 
-    <div class="map-shell rounded-lg">
+    <div class="map-shell rounded-lg -mx-1 -mb-1">
       <div id="lienzo">
         <!-- PLANO SVG (1000x700) -->
         <svg class="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid meet">
