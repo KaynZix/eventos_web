@@ -52,61 +52,84 @@ class MapaEditorController extends Controller
     public function save(Request $request, Evento $evento)
     {
         try {
-            $data = $request->validate([
-                'mesas'            => 'array',
-                'mesas.*.sillas'   => 'required|integer|min:1|max:8',
-                'mesas.*.x'        => 'required|integer|min:0',
-                'mesas.*.y'        => 'required|integer|min:0',
-                'mesas.*.rot'      => 'nullable|integer|min:0|max:359',
-            ]);
+        $data = $request->validate([
+            'mesas'              => 'array',
+            'mesas.*.id_mesa'    => 'nullable|integer|exists:mesa,id',   // ← nuevo
+            'mesas.*.sillas'     => 'required|integer|min:1|max:8',
+            'mesas.*.x'          => 'required|integer|min:0',
+            'mesas.*.y'          => 'required|integer|min:0',
+            'mesas.*.rot'        => 'nullable|integer|min:0|max:359',
+        ]);
 
-            $mesas = $data['mesas'] ?? [];
+        $mesas = $data['mesas'] ?? [];
 
-            DB::transaction(function () use ($evento, $mesas) {
-                // borrar layout anterior del evento
-                $mesaIds = DB::table('escenario')
-                    ->where('id_evento', $evento->id)
-                    ->pluck('id_mesa');
+        DB::transaction(function () use ($evento, $mesas) {
+            // mesas ya vinculadas a este evento
+            $existentes = DB::table('escenario')
+                ->where('id_evento', $evento->id)
+                ->pluck('id_mesa')
+                ->all();
 
-                if ($mesaIds->count()) {
-                    DB::table('escenario')->where('id_evento', $evento->id)->delete();
-                    DB::table('mesa')->whereIn('id', $mesaIds)->delete();
-                }
+            $quedan = [];
 
-                // columnas disponibles
-                $cols   = Schema::getColumnListing('escenario');
-                $hasX   = in_array('x', $cols);
-                $hasY   = in_array('y', $cols);
-                $hasRot = in_array('rot', $cols);
-                $hasHora= in_array('hora_reserva', $cols);
-                $hasEst = in_array('estado', $cols);
+            foreach ($mesas as $m) {
+                $rot = (int)($m['rot'] ?? 0);
 
-                foreach ($mesas as $m) {
+                if (!empty($m['id_mesa']) && in_array((int)$m['id_mesa'], $existentes, true)) {
+                    // actualizar mesa existente
+                    $mesaId = (int)$m['id_mesa'];
+
+                    DB::table('mesa')->where('id', $mesaId)->update([
+                        'sillas' => (int)$m['sillas'],
+                    ]);
+
+                    DB::table('escenario')
+                        ->where('id_evento', $evento->id)
+                        ->where('id_mesa', $mesaId)
+                        ->update([
+                            'id_escenario' => (int)$evento->id_escenario,
+                            'x' => (int)$m['x'],
+                            'y' => (int)$m['y'],
+                            'rot' => $rot,
+                        ]);
+
+                    $quedan[] = $mesaId;
+                } else {
+                    // crear una nueva mesa
                     $mesaId = DB::table('mesa')->insertGetId([
                         'sillas' => (int)$m['sillas'],
                     ]);
 
-                    $payload = [
+                    DB::table('escenario')->insert([
                         'id_evento'    => (int)$evento->id,
                         'id_mesa'      => (int)$mesaId,
                         'id_escenario' => (int)$evento->id_escenario,
-                    ];
-                    if ($hasX)   $payload['x'] = (int)$m['x'];
-                    if ($hasY)   $payload['y'] = (int)$m['y'];
-                    if ($hasRot) $payload['rot'] = (int)($m['rot'] ?? 0);
-                    if ($hasHora)$payload['hora_reserva'] = null;
-                    if ($hasEst) $payload['estado'] = 'disponible';
+                        'x' => (int)$m['x'],
+                        'y' => (int)$m['y'],
+                        'rot' => $rot,
+                    ]);
 
-                    DB::table('escenario')->insert($payload);
+                    $quedan[] = $mesaId;
                 }
-            });
+            }
 
-            return response()->json(['ok' => true]);
-        } catch (\Throwable $e) {
-            return response()->json([
-                'ok'  => false,
-                'msg' => $e->getMessage()
-            ], 500);
+            // eliminar sólo las mesas que el usuario quitó del mapa
+            if (!empty($existentes)) {
+                $eliminar = array_diff($existentes, $quedan);
+                if (!empty($eliminar)) {
+                    DB::table('escenario')
+                        ->where('id_evento', $evento->id)
+                        ->whereIn('id_mesa', $eliminar)
+                        ->delete();
+
+                    DB::table('mesa')->whereIn('id', $eliminar)->delete();
+                }
+            }
+        });
+
+        return response()->json(['ok' => true]);
+    } catch (\Throwable $e) {
+        return response()->json(['ok' => false, 'msg' => $e->getMessage()], 500);
         }
     }
 }

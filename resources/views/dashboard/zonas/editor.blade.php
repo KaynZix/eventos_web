@@ -127,6 +127,16 @@
           <line x1="50" y1="550" x2="680" y2="550" stroke="#5b6475" stroke-width="6" opacity=".6"/>
           <line x1="820" y1="360" x2="780" y2="360" stroke="#5b6475" stroke-width="4" />
           <line x1="820" y1="420" x2="780" y2="420" stroke="#5b6475" stroke-width="4" />
+ 
+          <line x1="790" y1="470" x2="680" y2="470" stroke="#027000ff" stroke-width="150" />
+          <line x1="740" y1="525" x2="640" y2="525" stroke="#027000ff" stroke-width="40" />
+          <line x1="580" y1="525" x2="480" y2="525" stroke="#027000ff" stroke-width="40" />
+          <line x1="420" y1="525" x2="320" y2="525" stroke="#027000ff" stroke-width="40" />
+
+          <circle cx="750" cy="250" r="25" fill="green" opacity="1" />
+          <circle cx="600" cy="300" r="20" fill="green" opacity="1" />
+          <circle cx="500" cy="300" r="20" fill="green" opacity="1" />
+          <circle cx="400" cy="300" r="20" fill="green" opacity="1" />
         </svg>
         <!-- Contenedor de zonas -->
         <div id="zones"></div>

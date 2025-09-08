@@ -279,6 +279,16 @@
                         <rect x="600" y="60" width="320" height="80" fill="#5b6475" opacity=".9" />
                         @endif
 
+                        <line x1="790" y1="470" x2="680" y2="470" stroke="#027000ff" stroke-width="150" />
+                        <line x1="740" y1="525" x2="640" y2="525" stroke="#027000ff" stroke-width="40" />
+                        <line x1="580" y1="525" x2="480" y2="525" stroke="#027000ff" stroke-width="40" />
+                        <line x1="420" y1="525" x2="320" y2="525" stroke="#027000ff" stroke-width="40" />
+
+                        <circle cx="750" cy="250" r="25" fill="green" opacity="1" />
+                        <circle cx="600" cy="300" r="20" fill="green" opacity="1" />       
+                        <circle cx="500" cy="300" r="20" fill="green" opacity="1" />       
+                        <circle cx="400" cy="300" r="20" fill="green" opacity="1" />
+
                         <line x1="540" y1="70" x2="540" y2="90" stroke="#5b6475" stroke-width="4" />
                         <line x1="580" y1="70" x2="580" y2="90" stroke="#5b6475" stroke-width="4" />
                         <line x1="50" y1="300" x2="400" y2="80" stroke="#5b6475" stroke-width="4" opacity=".7" />
@@ -288,7 +298,7 @@
                         <line x1="50" y1="500" x2="680" y2="500" stroke="#5b6475" stroke-width="6" opacity=".6" />
                         <line x1="50" y1="550" x2="680" y2="550" stroke="#5b6475" stroke-width="6" opacity=".6" />
                         <line x1="820" y1="360" x2="780" y2="360" stroke="#5b6475" stroke-width="4" />
-                        <line x1="820" y1="420" x2="780" y2="420" stroke="#5b6475" stroke-width="4" />
+                        <line x1="820" y1="420" x2="780" y2="420" stroke="#5b6475" stroke-width="4" />   
                     </svg>
                     <div id="zonas-overlay"></div> <!-- overlay visual -->
                     <div id="mesas-layer"></div> <!-- mesas arrastrables -->
@@ -410,29 +420,32 @@
     /* ===========================================================
        CREAR / GIRAR / ELIMINAR / ARRASTRAR
        =========================================================== */
+
     function addMesaNode({
+        idMesa = null,   // ← NUEVO
         sillas,
         x,
         y,
         rot = 0
-    }) {
+        }) {
         sillas = Math.max(1, Math.min(8, parseInt(sillas, 10) || 1));
 
         const el = document.createElement('div');
         el.className = `mesa ${sizeClassFor(sillas)}`;
         el.dataset.sillas = String(sillas);
         el.dataset.rot = String(rot | 0);
+        el.dataset.idMesa = idMesa != null ? String(idMesa) : "";  // ← NUEVO
         el.innerHTML = `
-    <div class="actions">
-      <button type="button" data-rot title="Girar 90°">⟳</button>
-      <button type="button" data-del title="Eliminar">✕</button>
-    </div>
-    ${buildMesaContent(sillas)}
-  `;
+            <div class="actions">
+            <button type="button" data-rot title="Girar 90°">⟳</button>
+            <button type="button" data-del title="Eliminar">✕</button>
+            </div>
+            ${buildMesaContent(sillas)}
+        `;
 
-        if (x == null || y == null)[x, y] = randomPointInside();
+        if (x == null || y == null) [x, y] = randomPointInside();
         el.style.left = Math.round(x) + 'px';
-        el.style.top = Math.round(y) + 'px';
+        el.style.top  = Math.round(y) + 'px';
         el.style.transform = `rotate(${(rot|0)}deg)`;
 
         // rotar
@@ -455,7 +468,8 @@
         layer.appendChild(el);
         markDirty();
         return el;
-    }
+        }
+
 
     function makeDraggable(el) {
         let dragging = false,
@@ -562,9 +576,10 @@
     });
 
     existentes.forEach(m => addMesaNode({
+        idMesa: m.id_mesa,       // <— NUEVO
         sillas: +m.sillas,
-        x: m.x,
-        y: m.y,
+        x: m.x, 
+        y: m.y, 
         rot: +(m.rot || 0)
     }));
 
@@ -580,6 +595,7 @@
 
     document.getElementById('guardar').addEventListener('click', async () => {
         const mesas = Array.from(layer.querySelectorAll('.mesa')).map(el => ({
+            id_mesa: el.dataset.idMesa ? parseInt(el.dataset.idMesa, 10) : null, // <— NUEVO
             sillas: parseInt(el.dataset.sillas, 10),
             x: Math.round(el.offsetLeft),
             y: Math.round(el.offsetTop),
