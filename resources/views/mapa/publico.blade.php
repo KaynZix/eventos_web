@@ -156,15 +156,32 @@
     </div>
 
     <div class="border-t border-white/10 pt-3">
-      <div class="text-sm text-neutral-300">
+      <!-- <div class="text-sm text-neutral-300">
         Mesas seleccionadas: <b id="selCount">0</b>
+      </div> -->
+      <div class="mt-2 text-sm">
+        <span class="font-semibold">Mesas seleccionadas: </span>
+        <span id="selCount">0</span>
+
+        <span class="ml-4 font-semibold">Valor total: </span>
+        <span id="valorTotal">$0</span>
+
+        <span class="ml-4 text-neutral-400">[ <span id="selList"></span> ]</span>
       </div>
+
+      <!-- Tooltip flotante para el hover de precio -->
+      <div id="hoverPrecioBox"
+          class="hidden fixed z-50 rounded-md border border-white/10 bg-black/70 px-2 py-1 text-xs pointer-events-none">
+        <span>Mesa <b id="hoverMesaId"></b> · <b id="hoverMesaPrecio"></b></span>
+      </div>
+
       <div class="mt-3 space-y-2">
-        <button id="cta-promos" class="w-full px-3 py-2 rounded bg-red-600 hover:bg-red-500 text-white disabled:opacity-50" disabled>
+        <a href="" id="cta-promos"></a>
+        <!-- <button id="cta-promos" class="w-full px-3 py-2 rounded bg-red-600 hover:bg-red-500 text-white disabled:opacity-50" disabled>
           RESERVAR Y AGREGAR PEDIDO ANTICIPADO
-        </button>
+        </button> -->
         <button id="cta-pago" class="w-full px-3 py-2 rounded bg-green-500 hover:bg-green-400 text-black disabled:opacity-50" disabled>
-          SOLO RESERVAR
+          RESERVAR
         </button>
       </div>
       <p class="text-xs text-neutral-400 mt-2">
@@ -179,6 +196,7 @@
   const layer     = document.getElementById('mesas-layer');
   const eventoId  = {{ $evento->id }};
   const statusUrl = "{{ route('mapa.publico.status', $evento->id) }}";
+  const fmtCLP = new Intl.NumberFormat('es-CL', { style:'currency', currency:'CLP', maximumFractionDigits: 0 });
 
   // Mesas desde backend (deben traer: escenario_id, sillas, x, y, rot, reservada, bloqueada, hold_left)
   const mesas = @json($mesas ?? []);
@@ -253,6 +271,7 @@
     el.className = `mesa ${sizeClassFor(+m.sillas)}`;
     el.dataset.id      = String(m.escenario_id);
     el.dataset.sillas  = String(m.sillas);
+    el.dataset.precio  = String(m.precio ?? 0);   // <--- NUEVO
     el.style.left      = (m.x|0)+'px';
     el.style.top       = (m.y|0)+'px';
     el.style.transform = `rotate(${(m.rot|0)}deg)`;
@@ -270,7 +289,24 @@
 
   /* ====== selección ====== */
   const selected = new Set();
-  function updateCount(){ document.getElementById('selCount').textContent = selected.size; updateCTAs(); }
+  const elTotal    = document.getElementById('valorTotal');
+  const elSelList  = document.getElementById('selList');
+    
+  function computeTotal() {
+    let sum = 0;
+    selected.forEach(id => {
+      const el = mesasMap.get(String(id));
+      sum += Number(el?.dataset.precio || 0);
+    });
+    return sum;
+  }
+
+  function updateSelectedUI() {
+    elTotal.textContent = fmtCLP.format(computeTotal());
+    elSelList.textContent = [...selected].join(', ');
+  }
+
+  function updateCount(){ document.getElementById('selCount').textContent = selected.size; updateSelectedUI(); updateCTAs(); }
 
   layer.addEventListener('click', (e)=>{
     const el = e.target.closest('.mesa'); if(!el) return;
@@ -328,15 +364,37 @@
   }
   setInterval(pollStatus, 5000);
 
+  const hoverBox    = document.getElementById('hoverPrecioBox');
+  const hoverMesaId = document.getElementById('hoverMesaId');
+  const hoverPrecio = document.getElementById('hoverMesaPrecio');
+
+  document.querySelectorAll('.mesa').forEach(el => {
+    el.addEventListener('mouseenter', () => {
+      hoverMesaId.textContent = el.dataset.id;
+      hoverPrecio.textContent = fmtCLP.format(Number(el.dataset.precio || 0));
+      hoverBox.classList.remove('hidden');
+    });
+    el.addEventListener('mousemove', (e) => {
+      hoverBox.style.left = (e.pageX + 12) + 'px';
+      hoverBox.style.top  = (e.pageY + 12) + 'px';
+    });
+    el.addEventListener('mouseleave', () => {
+      hoverBox.classList.add('hidden');
+    });
+  });
+
   /* ====== iniciar reserva ====== */
   async function postStart(flow){
+  const total = computeTotal();
+
     const res = await fetch("{{ route('reservas.start') }}",{
       method:'POST',
       headers:{'Content-Type':'application/json','X-CSRF-TOKEN':token,'Accept':'application/json'},
       body: JSON.stringify({
         evento_id: eventoId,
         llegada: slotSel,
-        mesas: Array.from(selected),
+        mesas: Array.from(selected).map(Number),
+        total,
         flow
       })
     });

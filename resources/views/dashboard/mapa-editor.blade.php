@@ -434,7 +434,12 @@
         el.className = `mesa ${sizeClassFor(sillas)}`;
         el.dataset.sillas = String(sillas);
         el.dataset.rot = String(rot | 0);
-        el.dataset.idMesa = idMesa != null ? String(idMesa) : "";  // ← NUEVO
+        if (idMesa != null) {
+            el.dataset.idMesa = String(idMesa);
+        } else {
+            // CID = id temporal único para poder mapear en la respuesta del backend
+            el.dataset.cid = `tmp_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+        }
         el.innerHTML = `
             <div class="actions">
             <button type="button" data-rot title="Girar 90°">⟳</button>
@@ -596,6 +601,7 @@
     document.getElementById('guardar').addEventListener('click', async () => {
         const mesas = Array.from(layer.querySelectorAll('.mesa')).map(el => ({
             id_mesa: el.dataset.idMesa ? parseInt(el.dataset.idMesa, 10) : null, // <— NUEVO
+            cid:     el.dataset.cid || null, // ← importante para mapear luego
             sillas: parseInt(el.dataset.sillas, 10),
             x: Math.round(el.offsetLeft),
             y: Math.round(el.offsetTop),
@@ -618,6 +624,27 @@
                 alert(data.msg || 'No se pudo guardar.');
                 return;
             }
+                        
+            // ✅ Actualiza IDs reales para las mesas nuevas usando el mapeo cid → id_mesa
+            if (Array.isArray(data.created)) {
+                data.created.forEach(({ cid, id_mesa }) => {
+                const el = layer.querySelector(`.mesa[data-cid="${cssEscape(cid)}"]`) 
+                        || layer.querySelector(`.mesa[data-cid="${cid}"]`); // fallback si no tienes cssEscape
+                if (el) {
+                    el.dataset.idMesa = String(id_mesa);
+                    el.removeAttribute('data-cid');
+                }
+                });
+            }
+
+            // (Opcional) elimina del DOM las que el backend eliminó realmente
+            if (Array.isArray(data.deleted)) {
+                data.deleted.forEach((id) => {
+                const el = layer.querySelector(`.mesa[data-id-mesa="${id}"], .mesa[data-idmesa="${id}"]`);
+                if (el) el.remove();
+                });
+            }
+
             clearDirty();
             alert('Guardado');
         } catch (e) {

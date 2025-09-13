@@ -28,9 +28,11 @@ class MapaPublicoController extends Controller
                 'm.id as mesa_id',
                 'm.sillas',
                 'e.x','e.y',
+                'e.rot',  
                 DB::raw('CASE WHEN r.id IS NULL THEN 0 ELSE 1 END as reservada'),
                 DB::raw('CASE WHEN h.id IS NULL THEN 0 ELSE 1 END as bloqueada'),
                 DB::raw('COALESCE(TIMESTAMPDIFF(SECOND, NOW(), h.expires_at),0) as hold_left'),
+                'm.precio',
             ])
             ->orderBy('y')->orderBy('x')
             ->get();

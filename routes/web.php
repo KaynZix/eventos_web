@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\EventoController;
 use App\Http\Controllers\Admin\MapaEditorController;
 use App\Http\Controllers\ReservasPublicController;
 use App\Http\Controllers\Admin\ZonasPrecioController;
+use App\Http\Controllers\Admin\ReservasAdminController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -27,12 +28,16 @@ Route::get('/eventos/{evento}/mapa/status', [MapaPublicoController::class, 'stat
 // Flujo de reserva pública
 Route::post('/reservas/start',   [ReservasPublicController::class, 'start'])->name('reservas.start');
 Route::get('/reservas/promos',   [ReservasPublicController::class, 'promos'])->name('reservas.promos');
-Route::post('/reservas/promos',  [ReservasPublicController::class, 'promosStore'])->name('reservas.promos.store');
-Route::get('/reservas/checkout', [ReservasPublicController::class, 'checkout'])->name('reservas.checkout');
-Route::post('/reservas/checkout',[ReservasPublicController::class, 'checkoutStore'])->name('reservas.checkout.store');
 Route::get('/reservas/ok',       [ReservasPublicController::class, 'ok'])->name('reservas.ok');
-Route::post('/reservas/cancelar',[ReservasPublicController::class, 'cancel'])->name('reservas.cancel');
 Route::get('/reservas/continuar',[ReservasPublicController::class, 'resume'])->name('reservas.resume');
+
+Route::get('/reservas/checkout', [ReservasPublicController::class, 'checkout'])->name('reservas.checkout');
+Route::post('/reservas/checkout', [ReservasPublicController::class, 'store'])->name('reservas.checkout.store');
+Route::post('/reservas/cancel', [ReservasPublicController::class, 'cancel'])->name('reservas.cancel');
+Route::post('/reservas/promos',   [ReservasPublicController::class, 'promosStore'])->name('reservas.promos.store');
+Route::post('/reservas/checkout', [ReservasPublicController::class, 'checkoutStore'])->name('reservas.checkout.store');
+
+Route::get ('/reservas/resume',   [ReservasPublicController::class, 'resume'])->name('reservas.resume');
 
 Route::get('/dashboard', function () {
     return view('dashboard');
@@ -55,7 +60,10 @@ Route::middleware(['auth', 'verified'])->prefix('dashboard')->name('dashboard.')
     Route::get('eventos/{evento}/zonas', [MapaEditorController::class, 'zonasIndex'])->name('eventos.zonas.index');
     Route::post('eventos/{evento}/zonas', [MapaEditorController::class, 'zonasSave'])->name('eventos.zonas.save');
     // RUTA PROMOCIONES 
-    // RUTA RESERVAS
+    
+    Route::get('reservas',       [ReservasAdminController::class, 'index'])->name('reservas.index');
+    Route::get('reservas/{id}',  [ReservasAdminController::class, 'show'])->whereNumber('id')->name('reservas.show');
+
     // RUTA PUBLICIDAD
     // Otras rutas necesarias
 });
